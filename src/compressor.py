@@ -15,7 +15,7 @@ class Compressor:
     This class finds a compressed binary representation of a Charger Stability Diagram (CSD), or bCSD for short.
     This is achieved by sampling from a simulator without any prior knowledge of the CSD.
 
-    This is done with complexity ?????? and can be parallelized.
+    This is done with complexity O(d * s ^ (d-1)) and can be parallelized.
     - The batch size is estimated with complexity O(1).
     - Complexity of the sampling process is = O(1 / log(1 - d / l) where d is the number of dimensions and l is the tile density factor
     - The compression process is O(volume_(transition line)) = O(d * s ^ (d-1))
