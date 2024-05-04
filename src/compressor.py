@@ -14,7 +14,11 @@ class Compressor:
     """
     This class finds a compressed binary representation of a Charger Stability Diagram (CSD), or bCSD for short.
     This is achieved by sampling from a simulator without any prior knowledge of the CSD.
-    This is done with complexity ?????? and is parallelizable.
+
+    This is done with complexity ?????? and can be parallelized.
+    - The batch size is estimated with complexity O(1).
+    - Complexity of the sampling process is = O(1 / log(1 - d / l) where d is the number of dimensions and l is the tile density factor
+    - The compression process is O(volume_(transition line)) = O(d * s ^ (d-1))
     """
 
     def __init__(self, path: Path()):
@@ -27,11 +31,62 @@ class Compressor:
     def estimate_batch_size(self) -> int:
         """
         This method estimates the batch size for the sampling process.
-        the batch size must guarantee with an high confidence level that at least a transition line points are sampled.
+        the batch size must guarantee with an high confidence level that at least a transition line point is sampled.
 
-        TODO confidence level formula
-        TODO confirm the estimation formula
-        TODO compute complexity of the sampling process
+        To to this, we estimate the probability of sampling a transition line point and use it to calculate the confidence of a binomial distribution.
+        The result is ?????
+
+        ----------------
+        Proof
+        ----------------
+        Given that:
+        - sensitivity s is the sensitivity of a single dimension of the simulated space
+        - dimensions d is the number of dimensions of the simulated space
+        - edge l is a parameter indicating the density of the transition lines
+
+        Lets assume that hexagons are cubes XD... to simplify the problem we consider the space to be tiled with cubes
+        instead of hexagons. This simplification is valid because the growth factor of the transition lines volume wrt d is the same.
+        Under our cube simplification, the edge l is the edge of the cubes.
+
+        Probability p is the probability of sampling a transition line point.
+        p = volume_(transition line) / volume_(tot)
+
+        The total volume formula is straightforward:
+        volume_(tot) = s^d
+
+        The transition line volume formula is more complex.
+        We first count the transition line for each dimension. The transition line is an hyperplane of dimension d-1.
+        N = s / l
+
+        The transition line volume is the volume of an hyperplane of dimension d-1.
+        volume_(row) = s ^ (d-1)
+
+        Hence, the total transition line volume is the volume of a single hyperplane multiplied by the number of hyperplanes N * d,
+        minus the volume of the intersections. The term of the intersections is the volume of an hyperplane of dimension d-2.
+        However, we ignore the intersections because they don't affect the order of magnitude of the volume.
+        volume_(transition line) = N * d * volume_(row) - intersections = N * d * s ^ (d-1)
+
+        Finally, the probability of sampling a transition line point at random out of the total space, is
+        p = N * d * s ^ (d-1) / s^d = s / l * d / s = d / l
+        We notice that the probability scales linearly with the number of dimensions and the number of transition lines.
+        Yay!
+
+        We wish to have high confidence in sampling at least one transition line point.
+        The probability of not sampling transition line point after b attempts is (1-p)^b.
+        The probability of sampling at least one transition line point after b attempts is 1 - (1-p)^b.
+        We want to compute b such that 1 - (1-p)^b >= c, where c is the confidence level.
+        We can rewrite the inequality as (1-p)^b <= 1 - c and solve as follows if 1-p > 0:
+        We can rewrite the inequality as b >= log(1 - c) / log(1 - p).
+        and finally find b >= log(1 - c) / log(1 - d / l).
+        
+        The complexity of the sampling process is O(b(d)) where b is the batch size:
+        O(1 / log(1 - d / l)
+        This can be parallelized because the sampling process of a point is independent of the other points.
+        
+        # TODO BUG !!!!!
+        This is wrong for two reasons:
+        First, I don't expect the result to be a function of just d and l, without s. I would rather expect d and a tile density factor l/s.
+        Second, if I plot the solution (see screenshot) I see that the solution does not grows with d, on the contrary it decreases exponentially, which is wrong.
 
         :return: the estimated batch size
         """
@@ -44,7 +99,7 @@ class Compressor:
         print('sampling batch size is ', batch_size)
         return batch_size
 
-    def random_sampling(self, batch_size: int = 1000) -> queue.Queue():
+    def random_sampling(self, batch_size: int) -> queue.Queue():
         """
         This method samples the simulator at random to get some transition line points.
         Sampled points are used to normalize the CSD values and initiate the compression process queue.
@@ -107,11 +162,14 @@ class Compressor:
                 neighbors.append(neighbor)
         return neighbors
 
-    def compression(self, to_process: queue.Queue):
+    def flood(self, to_process: queue.Queue):
         """
-        This method fills the compressed binary CSD (bCSD) sampling .
+        This method fills the compressed binary CSD (bCSD) by starting with some transition line points,
+        and then adding their transition line neighbors, and so on, like a flood that propagates in the water channels of the transition lines.
         The compressed binary CSD (bCSD) is a list of coordinates of transition line points.
-        # process each element of the transition line points list while adding new points to the list
+        The CPU and memory complexity to compute the bCSD is the total volume of the transition lines, so is the size.
+        The complexity of the flood process is O(volume_(transition line)) = O(d * s ^ (d-1)).
+        The flood process can be parallelized because the computation of a point is independent of the other points.
 
         # TODO implement retries for d > 1
 
@@ -142,10 +200,9 @@ class Compressor:
     def run(self) -> list:
         """
         This method runs the compression process and returns the compressed binary CSD (bCSD).
-
         :return: the compressed binary CSD (bCSD)
         """
         batch_size = self.estimate_batch_size()
         to_process = self.random_sampling(batch_size)
-        self.compression(to_process)
+        self.flood(to_process)
         return self.bCSD

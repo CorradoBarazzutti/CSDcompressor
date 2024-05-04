@@ -46,7 +46,7 @@ class CompressorTest(unittest.TestCase):
         compressor = Compressor(path)
         batch_size = compressor.estimate_batch_size()
         to_process = compressor.random_sampling(batch_size)
-        compressor.compression(to_process)
+        compressor.flood(to_process)
         # assert bCSD is not empty
         self.assertTrue(compressor.bCSD)
 
