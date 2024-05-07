@@ -10,7 +10,7 @@ from src.utilities.neighbours import d_infinity_neighbors
 from src.utilities.orderedSetQueue import OrderedSetQueue
 
 
-class Compressor:
+class Flooder:
     """
     This class finds a compressed binary representation of a Charger Stability Diagram (CSD), or bCSD for short.
     This is achieved by sampling from a simulator without any prior knowledge of the CSD.
